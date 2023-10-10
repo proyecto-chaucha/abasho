@@ -1,11 +1,10 @@
 from PIL import Image, ImageDraw, ImageColor
-from random import uniform, randint
-from colourlovers import clapi
-import os, argparse, json
+from random import uniform, randint, choice
+import os, argparse, json, requests
 from hashlib import sha256
 
-ps = 16
-s = 0.97
+ps = 64
+s = 0.96
 used_palettes = []
 randskin = ["#A68C69", "#6B4E4B", "#ffc79f", "#FBC4AC"]
 
@@ -41,24 +40,13 @@ def main(args):
     num = args.N
     img = Image.new('RGB', (16*ps,16*ps))
     draw = ImageDraw.Draw(img)
-
-    cl = clapi.ColourLovers()
     
-    a = []
     counter = 0
     rare_counter = 0
     alone_counter = [0,0]
     gender_counter_big = [0,0]
     gender_counter_bb = [0,0]
     
-    for i in range(5):
-        a += cl.search_palettes(request='top', keywords="pastel", numResults=100, resultOffset=len(a))
-        print("added", len(a))
-
-    for i in range(5):
-        a += cl.search_palettes(request='top', numResults=100, resultOffset=len(a))
-        print("added", len(a))
-
 
     if not os.path.isdir("output"):
         os.mkdir("output")
@@ -66,7 +54,7 @@ def main(args):
     if not os.path.isdir("metadata"):
         os.mkdir("metadata")
 
-    while counter != args.N and len(a) > 0:
+    while counter != args.N:
 
         base_properties = {"external_url": "https:/chaucha.art/abasho/",
 	                        "image": "https://ipfs.io/ipfs/TEMP/%i.png",
@@ -75,15 +63,15 @@ def main(args):
 	                        "attributes": []
 	                        }
 
-        rand_palette = randint(0, len(a) - 1)
-        palette = a[rand_palette]
-        a.pop(rand_palette)
-
-        if len(palette.colors) < 4 or palette.colors[:4] in used_palettes:
-            continue
-
+        palette_request = requests.post("http://colormind.io/api/", data='{"model":"default"}').json()
+        
+        new_palette = []
+        for color in palette_request["result"]:
+            new_palette.append(''.join('{:02X}'.format(n) for n in color))
+        
         darkest_color = False
-        for color in palette.colors:
+
+        for color in new_palette:
             c_tuple = ImageColor.getrgb("#" + color)
             if sum(c_tuple) < 200:
                 darkest_color = True
@@ -93,16 +81,17 @@ def main(args):
 
         gender_bb = randint(0,1)
         gender_adulto = randint(0,1)
-        skintone1_rng = randint(0,len(randskin)-1)
-        skintone2_rng = randint(0,len(randskin)-1)
+        skintone1_rng = randint(0, len(randskin)-1)
+        skintone2_rng = randint(0, len(randskin)-1)
 
         rare_flag = True if randint(0, 10) > 9 or counter % 100 == 0 else False
+        rare_flag = True
 
         alone_flag = True if randint(1, 100) >= 95 else False
 
         if rare_flag:
-            skintone1 = "#" + palette.colors[len(palette.colors) - 1]
-            skintone2 = "#" + palette.colors[len(palette.colors) - 1]
+            skintone1 = "#" + new_palette[3]
+            skintone2 = "#" + new_palette[3]
         else:
             skintone1 = randskin[skintone1_rng]
             skintone2 = randskin[skintone2_rng]
@@ -116,9 +105,9 @@ def main(args):
             used_matrix = matrix_test
 
 
-        shirt, shirt_shade = shade("#" + palette.colors[0])
-        pants, pants_shade = shade("#" + palette.colors[1])
-        hair, hair_shade = shade("#" + palette.colors[2])
+        shirt, shirt_shade = shade("#" + new_palette[0])
+        pants, pants_shade = shade("#" + new_palette[1])
+        hair, hair_shade = shade("#" + new_palette[2])
 
         skin1, skin_shade1 = shade(skintone1)
         _, lips1 = shade(skin_shade1)
@@ -128,7 +117,7 @@ def main(args):
         _, lips2 = shade(skin_shade2)
         _, lips2 = shade(lips2)
 
-        bg, bg_shadow = shade("#" + palette.colors[3])
+        bg, bg_shadow = shade("#" + new_palette[3])
         _, bg_shadow = shade(bg_shadow)
 
         shoes, shoes_shade = shade("#333333")
@@ -204,11 +193,8 @@ def main(args):
         gender_counter_bb[gender_bb] += 1
         gender_counter_big[gender_adulto] += 1
 
-        
-        if not palette.colors[:4] in used_palettes:
-            used_palettes.append(palette.colors[:4])
 
-        print(rare_flag, counter, palette.title, gender_bb, gender_adulto, skintone1, skintone2)
+        print(rare_flag, counter, gender_bb, gender_adulto, skintone1, skintone2)
 
         gender_adulto = "Madre" if gender_adulto == 1 else "Padre"
         gender_bb = "Hija" if gender_bb == 1 else "Hijo"
@@ -238,7 +224,6 @@ def main(args):
     print("gender_counter_bb:", gender_counter_bb)
 
 if __name__ == '__main__':
-
     parser = argparse.ArgumentParser()
     parser.add_argument("N", help="Number of generations", type=int)
     args = parser.parse_args()
